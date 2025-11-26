@@ -135,6 +135,11 @@ email_generator.ipynb
 tutorial_chromadb.ipynb
 tutorial_groq.ipynb
 
+# ChromaDB vectorstore (database files)
+vectorstore/*.bin
+vectoretoro/*.sqliee3/*.sqlite3
+vectorstore/*/
+
 # Spyder project settings
 .spyderproject
 .spyproject
