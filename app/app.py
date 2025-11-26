@@ -321,27 +321,115 @@ def render_login_page():
                     st.warning("⚠️ Please fill in all fields")
 
 
-def render_email_generator(llm, portfolio):
+def render_resume_upload_ui(s3_manager, username):
+    """Render resume upload interface for first-time users"""
+    st.title("📄 Upload Your Resume")
+    st.markdown("**Welcome! Please upload your resume to get started.**")
+    st.markdown("Your resume will be used to personalize job application emails based on your skills and experience.")
+    st.markdown("---")
+    
+    uploaded_file = st.file_uploader(
+        "Choose your resume file",
+        type=['pdf', 'docx', 'doc', 'txt'],
+        help="Supported formats: PDF, DOCX, DOC, TXT"
+    )
+    
+    if uploaded_file is not None:
+        st.success(f"✅ File selected: {uploaded_file.name}")
+        st.info(f"📊 File size: {uploaded_file.size / 1024:.2f} KB")
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("📤 Upload Resume", use_container_width=True):
+                with st.spinner("Uploading your resume..."):
+                    file_content = uploaded_file.read()
+                    file_type = uploaded_file.name.split('.')[-1]
+                    
+                    result = s3_manager.upload_resume(
+                        username=username,
+                        file_content=file_content,
+                        file_name=uploaded_file.name,
+                        file_type=file_type
+                    )
+                    
+                    if result['success']:
+                        st.success("✅ " + result['message'])
+                        st.balloons()
+                        st.info("🔄 Redirecting to email generator...")
+                        st.session_state.resume_uploaded = True
+                        st.rerun()
+                    else:
+                        st.error("❌ " + result['message'])
+        
+        with col2:
+            if st.button("⏭️ Skip for Now", use_container_width=True):
+                st.session_state.resume_uploaded = True
+                st.info("You can upload your resume later from the sidebar.")
+                st.rerun()
+    
+    st.markdown("---")
+    st.markdown("""
+    ### 💡 Why Upload Your Resume?
+    - **Personalized Emails**: Generate emails tailored to your actual skills and experience
+    - **Better Matches**: Our AI will match your profile with job requirements
+    - **Save Time**: No need to manually enter your skills each time
+    - **Secure Storage**: Your resume is securely stored in AWS S3
+    """)
+
+
+def render_email_generator(llm, portfolio, s3_manager, username):
     """Render the email generator interface"""
     
-    # Show user info and logout in sidebar
+    # Show user info and resume management in sidebar
     with st.sidebar:
         st.markdown("### 👤 User Info")
-        st.write(f"**Username:** {st.session_state.username}")
+        st.write(f"**Username:** {username}")
+        
+        st.markdown("---")
+        st.markdown("### 📄 Resume Management")
+        
+        # Check if user has uploaded resume
+        has_resume = s3_manager.check_user_has_resume(username) if s3_manager.is_configured else False
+        
+        if has_resume:
+            st.success("✅ Resume uploaded")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 Update", use_container_width=True):
+                    st.session_state.show_resume_update = True
+                    st.rerun()
+            with col2:
+                if st.button("🗑️ Delete", use_container_width=True):
+                    result = s3_manager.delete_resume(username)
+                    if result['success']:
+                        st.success("✅ Resume deleted")
+                        st.session_state.resume_uploaded = False
+                        st.rerun()
+                    else:
+                        st.error("❌ " + result['message'])
+        else:
+            st.warning("⚠️ No resume uploaded")
+            if st.button("📤 Upload Resume", use_container_width=True):
+                st.session_state.show_resume_update = True
+                st.rerun()
+        
         st.markdown("---")
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.access_token = None
             st.session_state.username = None
+            st.session_state.resume_uploaded = False
             st.rerun()
         
         st.markdown("---")
         st.markdown("""
         ### 📖 How to Use
-        1. Enter a job posting URL
-        2. Click Submit
-        3. Get generated cold email
-        4. Copy and customize!
+        1. Upload your resume (if not done)
+        2. Enter a job posting URL
+        3. Click Generate Email
+        4. Get personalized email
+        5. Copy and customize!
         """)
     
     st.title("📧 Cold Mail Generator")
@@ -370,8 +458,11 @@ def render_email_generator(llm, portfolio):
                     skills = job.get('skills', [])
                     links = portfolio.query_links(skills)
                     
+                    # Get user's resume summary for personalization
+                    user_info = portfolio.get_resume_summary()
+                    
                     with st.spinner("✍️ Writing personalized email..."):
-                        email = llm.write_mail(job, links)
+                        email = llm.write_mail(job, links, user_info)
                     
                     st.markdown("---")
                     st.subheader("📨 Generated Email")
@@ -379,6 +470,12 @@ def render_email_generator(llm, portfolio):
                     
                     # Add copy button hint
                     st.info("💡 Tip: Click the copy icon in the top-right corner of the code block to copy the email")
+                    
+                    # Show resume status
+                    if user_info:
+                        st.success("✅ Email personalized using your resume")
+                    else:
+                        st.info("ℹ️ Email generated using default portfolio (upload resume for better personalization)")
                     
             except Exception as e:
                 st.error(f"❌ An Error Occurred: {e}")
@@ -439,16 +536,46 @@ def main():
         st.session_state.access_token = None
     if 'username' not in st.session_state:
         st.session_state.username = None
+    if 'resume_uploaded' not in st.session_state:
+        st.session_state.resume_uploaded = False
+    if 'show_resume_update' not in st.session_state:
+        st.session_state.show_resume_update = False
     
     # Check authentication status
     if not st.session_state.authenticated:
         # Show login page
         render_login_page()
     else:
-        # Show email generator app
+        # User is authenticated
+        from s3_manager import S3Manager
+        
+        username = st.session_state.username
+        s3_manager = S3Manager()
         chain = Chain()
-        portfolio = Portfolio()
-        render_email_generator(chain, portfolio)
+        
+        # Initialize portfolio with username and LLM
+        portfolio = Portfolio(username=username, llm=chain.llm)
+        
+        # Check if showing resume update modal
+        if st.session_state.show_resume_update:
+            render_resume_upload_ui(s3_manager, username)
+            if st.button("← Back to Email Generator"):
+                st.session_state.show_resume_update = False
+                st.rerun()
+        else:
+            # Check if user needs to upload resume (first-time user)
+            if s3_manager.is_configured and not st.session_state.resume_uploaded:
+                has_resume = s3_manager.check_user_has_resume(username)
+                if not has_resume:
+                    # Show resume upload for first-time users
+                    render_resume_upload_ui(s3_manager, username)
+                else:
+                    # User has resume, proceed to email generator
+                    st.session_state.resume_uploaded = True
+                    render_email_generator(chain, portfolio, s3_manager, username)
+            else:
+                # Show email generator
+                render_email_generator(chain, portfolio, s3_manager, username)
 
 
 if __name__ == "__main__":

@@ -68,29 +68,75 @@ class Chain:
         all_emails = list(set(regex_emails + llm_emails))
         return all_emails
 
-    def write_mail(self, job, links):
+    def write_mail(self, job, links, user_info=None):
+        """
+        Write personalized cold email based on job and user's resume/portfolio
+        
+        Args:
+            job: Job description dictionary
+            links: Portfolio links or resume-based skills
+            user_info: Optional user resume summary for personalization
+        """
+        # Check if links are from resume (dict format) or CSV (simple format)
+        portfolio_text = self._format_portfolio_info(links, user_info)
+        
         prompt_email = PromptTemplate.from_template(
             """
             ### JOB DESCRIPTION:
             {job_description}
 
+            ### CANDIDATE PROFILE:
+            {portfolio_info}
+
             ### INSTRUCTION:
-            You are Mohan, a business development executive at AtliQ. AtliQ is an AI & Software Consulting company dedicated to facilitating
-            the seamless integration of business processes through automated tools. 
-            Over our experience, we have empowered numerous enterprises with tailored solutions, fostering scalability, 
-            process optimization, cost reduction, and heightened overall efficiency. 
-            Your job is to write a cold email to the client regarding the job mentioned above describing the capability of AtliQ 
-            in fulfilling their needs.
-            Also add the most relevant ones from the following links to showcase Atliq's portfolio: {link_list}
-            Remember you are Mohan, BDE at AtliQ. 
-            Do not provide a preamble.
+            You are writing a cold email on behalf of a job applicant to the hiring manager for the position described above.
+            
+            The email should:
+            1. Express genuine interest in the specific role
+            2. Highlight relevant skills and experiences that match the job requirements
+            3. Mention specific achievements or projects that demonstrate capability
+            4. Be concise, professional, and personalized
+            5. Include a clear call-to-action
+            
+            Use the candidate's profile information to make the email authentic and relevant.
+            Do not provide a preamble or subject line.
+            
             ### EMAIL (NO PREAMBLE):
 
             """
         )
         chain_email = prompt_email | self.llm
-        res = chain_email.invoke({"job_description": str(job), "link_list": links})
+        res = chain_email.invoke({
+            "job_description": str(job), 
+            "portfolio_info": portfolio_text
+        })
         return res.content
+    
+    def _format_portfolio_info(self, links, user_info=None):
+        """Format portfolio information for email generation"""
+        if not links:
+            return "No specific portfolio information available."
+        
+        formatted = []
+        
+        # Check if links contain resume-based data
+        for item in links:
+            if isinstance(item, dict):
+                if 'skill' in item:
+                    formatted.append(f"- Skill: {item['skill']}")
+                elif 'type' in item:
+                    formatted.append(f"- {item['type'].title()}: {item.get('description', '')}")
+                elif 'links' in item:
+                    formatted.append(f"- Portfolio Link: {item['links']}")
+        
+        # Add user info summary if available
+        if user_info:
+            if 'summary' in user_info:
+                formatted.insert(0, f"Professional Summary: {user_info['summary']}")
+            if 'skills' in user_info and user_info['skills']:
+                formatted.insert(1, f"Key Skills: {', '.join(user_info['skills'][:10])}")
+        
+        return "\n".join(formatted) if formatted else "Candidate has relevant technical experience."
 
 if __name__ == "__main__":
     print(os.getenv("GROQ_API_KEY"))
