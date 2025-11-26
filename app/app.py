@@ -395,10 +395,15 @@ def main():
         page_title="Email Generator - AWS Cognito",
         page_icon="📧",
         layout="wide",
-        initial_sidebar_state="expanded"
+        initial_sidebar_state="expanded",
+        menu_items={
+            'Get Help': None,
+            'Report a bug': None,
+            'About': None
+        }
     )
     
-    # Custom CSS for better styling
+    # Custom CSS for better styling and hiding deploy button
     st.markdown("""
         <style>
         .main {
@@ -411,6 +416,18 @@ def main():
             height: 50px;
             padding: 0 2rem;
             font-size: 1.1rem;
+        }
+        /* Hide deploy button */
+        .stDeployButton {
+            visibility: hidden;
+        }
+        /* Hide the entire toolbar in top right */
+        header[data-testid="stHeader"] > div:nth-child(2) {
+            display: none;
+        }
+        /* Alternative: Hide just the deploy button */
+        button[kind="header"] {
+            display: none;
         }
         </style>
     """, unsafe_allow_html=True)
