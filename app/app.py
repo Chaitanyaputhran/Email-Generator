@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from chains import Chain
 from portfolio import Portfolio
 from utils import clean_text
+from sendEmails import SESEmailSender
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -381,6 +382,7 @@ def render_email_generator(llm, portfolio, s3_manager, username):
     """Render the email generator interface"""
     
     # Show user info and resume management in sidebar
+    generated_email = ""
     with st.sidebar:
         st.markdown("### 👤 User Info")
         st.write(f"**Username:** {username}")
@@ -440,18 +442,35 @@ def render_email_generator(llm, portfolio, s3_manager, username):
     
     # Initialize email_generated state if not exists
     if 'email_generated' not in st.session_state:
-        st.session_state.email_generated = False
+        st.session_state.email_generated = True
     
     col1, col2 = st.columns([2, 1])
     with col1:
         submit_button = st.button("🚀 Generate Email", use_container_width=True)
     with col2:
+        # Use session_state to determine whether to enable send button
         send_mail_button = st.button("📧 Send Mail", use_container_width=True, disabled=not st.session_state.email_generated)
     
     if send_mail_button:
         if st.session_state.email_generated:
+            sender = SESEmailSender(
+                aws_access_key=os.getenv(AWS_SES_ACCESS),
+                aws_secret_key=os.getenv(AWS_SES_SECRET),
+                region_name="us-east-1"  
+            )
+
+            # <<< FIX: use the actual generated email saved in session state >>>
+            email_body = st.session_state.get("final_email_body", "")
+
+            result = sender.send_email(
+                sender="anuragincloud@gmail.com",
+                recipients=["ashwinipanday62@gmail.com"],
+                subject="Job Application",
+                body_text=email_body,
+                body_html=email_body
+            )
+            print("Generated Mail " + email_body)
             st.success("✅ Mail sent successfully!")
-            st.info("📧 Email has been sent (check your email client or logs)")
         else:
             st.warning("⚠️ Please generate an email first before sending")
 
@@ -459,7 +478,7 @@ def render_email_generator(llm, portfolio, s3_manager, username):
         if url_input:
             try:
                 # Reset email_generated state when generating new email
-                st.session_state.email_generated = False
+                st.session_state.email_generated = True
                 
                 with st.spinner("🔍 Analyzing job posting..."):
                     loader = WebBaseLoader([url_input])
@@ -480,6 +499,11 @@ def render_email_generator(llm, portfolio, s3_manager, username):
                     
                     with st.spinner("✍️ Writing personalized email..."):
                         email = llm.write_mail(job, links, user_info)
+                        generated_email = email
+
+                        # <<< FIX: Save the generated email to session state so Send Mail uses it >>>
+                        st.session_state.final_email_body = email
+                        st.session_state.email_generated = True
                     
                     st.markdown("---")
                     st.subheader("📨 Generated Email")
