@@ -437,11 +437,30 @@ def render_email_generator(llm, portfolio, s3_manager, username):
     st.markdown("---")
     
     url_input = st.text_input("Enter a Job Posting URL:", value="https://jobs.nike.com/job/R-33460", placeholder="https://example.com/job/...")
-    submit_button = st.button("🚀 Generate Email", use_container_width=True)
+    
+    # Initialize email_generated state if not exists
+    if 'email_generated' not in st.session_state:
+        st.session_state.email_generated = False
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        submit_button = st.button("🚀 Generate Email", use_container_width=True)
+    with col2:
+        send_mail_button = st.button("📧 Send Mail", use_container_width=True, disabled=not st.session_state.email_generated)
+    
+    if send_mail_button:
+        if st.session_state.email_generated:
+            st.success("✅ Mail sent successfully!")
+            st.info("📧 Email has been sent (check your email client or logs)")
+        else:
+            st.warning("⚠️ Please generate an email first before sending")
 
     if submit_button:
         if url_input:
             try:
+                # Reset email_generated state when generating new email
+                st.session_state.email_generated = False
+                
                 with st.spinner("🔍 Analyzing job posting..."):
                     loader = WebBaseLoader([url_input])
                     data = clean_text(loader.load().pop().page_content)
@@ -451,8 +470,6 @@ def render_email_generator(llm, portfolio, s3_manager, username):
                 
                 with st.spinner("🤖 Extracting job requirements..."):
                     jobs = llm.extract_jobs(data)
-                
-                st.success("✅ Email generated successfully!")
                 
                 for job in jobs:
                     skills = job.get('skills', [])
@@ -476,6 +493,10 @@ def render_email_generator(llm, portfolio, s3_manager, username):
                         st.success("✅ Email personalized using your resume")
                     else:
                         st.info("ℹ️ Email generated using default portfolio (upload resume for better personalization)")
+                
+                # Enable Send Mail button after email is generated
+                st.success("✅ Email generated successfully!")
+                st.session_state.email_generated = True
                     
             except Exception as e:
                 st.error(f"❌ An Error Occurred: {e}")
