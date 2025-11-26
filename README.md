@@ -253,13 +253,6 @@ EXPOSE 8501
 CMD ["streamlit", "run", "app/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
 ```
 
-## 📄 License
-
-Copyright (C) Codebasics Inc. All rights reserved.
-
-**Additional Terms:**
-This software is licensed under the MIT License. However, commercial use of this software is strictly prohibited without prior written permission from the author. Attribution must be given in all copies or substantial portions of the software.
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
