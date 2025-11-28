@@ -32,6 +32,8 @@ class CognitoAuth:
         self.user_pool_id = os.getenv('COGNITO_USER_POOL_ID')
         self.client_id = os.getenv('COGNITO_CLIENT_ID')
         self.client_secret = os.getenv('COGNITO_CLIENT_SECRET')
+        # self.client_id = os.getenv('COGNITO_CLIENT_ID')
+        # self.client_secret = os.getenv('COGNITO_CLIENT_SECRET')
         
         # Check if Cognito credentials are configured
         self.is_configured = all([
@@ -454,8 +456,8 @@ def render_email_generator(llm, portfolio, s3_manager, username):
     if send_mail_button:
         if st.session_state.email_generated:
             sender = SESEmailSender(
-                aws_access_key=os.getenv(AWS_SES_ACCESS),
-                aws_secret_key=os.getenv(AWS_SES_SECRET),
+                aws_access_key=os.getenv('AWS_SES_ACCESS'),
+                aws_secret_key=os.getenv('AWS_SES_SECRET'),
                 region_name="us-east-1"  
             )
 
